@@ -1,20 +1,21 @@
 // Renders the report and handles the per-team agent switch.
 
 const STORAGE_KEY = "agent-spend-report.agentsOff";
+const LIMITS_KEY = "agent-spend-report.limits";
 
-function loadAgentsOff() {
+function load(key, fallback) {
   try {
-    return new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"));
+    return JSON.parse(localStorage.getItem(key)) ?? fallback;
   } catch {
-    return new Set();
+    return fallback;
   }
 }
 
-function saveAgentsOff(set) {
+function save(key, value) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...set]));
+    localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // Storage can be unavailable (private window, file:// restrictions). The switch still works for this visit.
+    // Storage can be unavailable (private window, file:// restrictions). The controls still work for this visit.
   }
 }
 
@@ -32,7 +33,10 @@ const el = (tag, attrs = {}, ...children) => {
 };
 
 const report = buildReport(TEAMS, PRS, SESSIONS);
-const agentsOff = loadAgentsOff();
+const agentsOff = new Set(load(STORAGE_KEY, []));
+const limits = load(LIMITS_KEY, {});
+// Default limit: this quarter's spend plus 20%, rounded up to the nearest $1,000.
+const limitFor = (r) => limits[r.id] ?? Math.ceil((r.totalSpend * 1.2) / 1000) * 1000;
 let selectedTeam = null;
 
 function renderSummary() {
@@ -62,12 +66,28 @@ function renderTeams() {
           onclick: (e) => {
             e.stopPropagation();
             off ? agentsOff.delete(r.id) : agentsOff.add(r.id);
-            saveAgentsOff(agentsOff);
+            save(STORAGE_KEY, [...agentsOff]);
             renderTeams();
           },
         },
         off ? "Agents off" : "Agents on",
       );
+      const limit = limitFor(r);
+      const limitInput = el("input", {
+        type: "number",
+        min: "0",
+        step: "1000",
+        value: String(limit),
+        class: "limit",
+        "aria-label": `Spend limit for ${r.name}`,
+        onclick: (e) => e.stopPropagation(),
+        onchange: (e) => {
+          limits[r.id] = Math.max(0, Math.round(Number(e.target.value) || 0));
+          save(LIMITS_KEY, limits);
+          renderTeams();
+        },
+      });
+      const used = limit > 0 ? r.totalSpend / limit : null;
       return el(
         "tr",
         { class: `${selectedTeam === r.id ? "selected" : ""} ${r.noPRShare > 0.4 ? "flag" : ""}`, onclick: () => selectTeam(r.id) },
@@ -78,6 +98,12 @@ function renderTeams() {
         el("td", { class: "num" }, String(r.prs.length)),
         el("td", { class: "num" }, money(r.agentCostPerPR)),
         el("td", { class: "num" }, el("span", { class: r.noPRShare > 0.4 ? "warn" : "" }, `${money(r.agentSpendNoPR)} (${pct(r.noPRShare)})`)),
+        el(
+          "td",
+          { class: "num" },
+          el("span", { class: "limit-wrap" }, "$", limitInput),
+          el("div", { class: `card-note ${used > 1 ? "warn" : ""}` }, used === null ? "No limit" : `${pct(used)} used`),
+        ),
         el("td", {}, toggle),
       );
     }),
