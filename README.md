@@ -4,7 +4,9 @@ A prototype of the report described in the writeup, built with Claude Code. It c
 
 ## How to run it
 
-There is no build step and nothing to install. Open `index.html` in a browser.
+The prototype is live at https://fernandakramer.github.io/agent-spend-report/.
+
+To run it locally, download the repo (Code → Download ZIP), unzip it, and open `index.html` in a browser. There is no build step and nothing to install.
 
 If your browser blocks local files, serve the folder with any static server and open http://localhost:8765. Two options:
 
